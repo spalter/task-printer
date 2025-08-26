@@ -47,8 +47,9 @@ echo "Server maintenance required" | taskprinter -t "IT ALERT"
 | Message | `-m` | `--message` | Task message | (reads from stdin if not provided) |
 | Date | `-d` | `--date` | Custom date | Current date (DD/MM/YYYY) |
 | Encode | `-e` | `--encode` | Generate QR code for message | false |
-| Address | `-a` | `--address` | Printer IP address | "192.168.1.93" |
+| Address | `-a` | `--address` | Printer IP address | "taskbob" |
 | Port | `-p` | `--port` | Printer port | 9100 |
+| Codepage | `-c` | `--codepage` | Character encoding (PC850, ISO8859_15, WPC1252, PC437) | PC850 |
 
 ### Examples
 
@@ -121,6 +122,22 @@ Complete the quarterly report by EOD
 
 When QR encoding is enabled (`-e`), the message will be printed as a QR code instead of text.
 
+## Character Encoding Support
+
+The application supports various character encodings to handle international characters:
+
+| Codepage | Best For | Characters Supported |
+|----------|----------|---------------------|
+| **PC850** | German, Western Europe | ä, ö, ü, ß, Ä, Ö, Ü, and other Latin characters |
+| **ISO8859_15** | Western Europe + Euro | All PC850 characters + € (Euro symbol) |
+| **WPC1252** | Windows Western | Standard Windows-1252 character set |
+| **PC437** | US/English | Basic ASCII + some extended characters |
+| **ISO8859_7** | Greek | Greek alphabet characters |
+
+**Default:** PC850 (recommended for German text)
+
+**Usage:** Add `-c CODEPAGE` or `--codepage CODEPAGE` to your command.
+
 ## Network Printer Setup
 
 1. Ensure your thermal printer supports ESC/POS commands
@@ -171,3 +188,11 @@ Contributions are welcome! Please feel free to submit issues, feature requests, 
 - QR code generation
 - Configurable printer address and port
 - Automatic date formatting
+
+### v0.1.1
+
+- Added addition page codes
+
+## Credits
+
+- [escpos-rs](https://github.com/fabienbellanger/escpos-rs)
