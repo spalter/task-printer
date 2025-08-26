@@ -1,98 +1,32 @@
-use chrono::Local;
 use clap::Parser;
-use escpos::printer::Printer;
-use escpos::printer_options::PrinterOptions;
-use escpos::utils::*;
-use escpos::{driver::*, errors::Result};
-use std::io::{self, Read};
+use escpos::errors::Result as EscposResult;
 
-#[derive(Parser)]
-#[command(name = "taskprinter")]
-#[command(about = "A CLI tool to print tasks to an ESC/POS printer")]
-struct Args {
-    #[arg(short, long)]
-    title: Option<String>,
+mod api;
+mod cli;
+mod printer;
 
-    #[arg(short, long)]
-    message: Option<String>,
+use api::start_api_server;
+use cli::{Args, run_cli_print};
 
-    #[arg(short, long)]
-    date: Option<String>,
-
-    #[arg(short, long)]
-    encode: Option<bool>,
-
-    #[arg(short, long)]
-    address: Option<String>,
-
-    #[arg(short, long)]
-    port: Option<u16>,
-
-    #[arg(short, long)]
-    codepage: Option<String>,
-}
-
-fn main() -> Result<()> {
+/// Main entry point of the application.
+/// 
+/// Parses command line arguments and either starts an API server or runs a CLI print job.
+/// When the `--api` flag is provided, starts an HTTP server on the specified port.
+/// Otherwise, executes a single print job with the provided arguments.
+/// 
+/// # Returns
+/// 
+/// * `EscposResult<()>` - Ok(()) on success, or an ESC/POS error on failure
+fn main() -> EscposResult<()> {
     let args = Args::parse();
-    let title = args.title.unwrap_or_else(|| "INCOMMING MESSAGE".to_string());
-    let message = match args.message {
-        Some(msg) => msg,
-        None => {
-            let mut buffer = String::new();
-            io::stdin()
-                .read_to_string(&mut buffer)
-                .map_err(|e| {
-                    eprintln!("Error reading from stdin: {}", e);
-                    std::process::exit(1);
-                })
-                .unwrap();
-            buffer.trim().to_string()
-        }
-    };
-    let date_str = args
-        .date
-        .unwrap_or_else(|| Local::now().format("%d/%m/%Y").to_string());
-    let address = args.address.unwrap_or_else(|| "taskbob".to_string());
-    let port = args.port.unwrap_or(9100);
-    let codepage = match args.codepage.as_deref() {
-        Some("PC850") => PageCode::PC850,
-        Some("ISO8859_15") => PageCode::ISO8859_15,
-        Some("WPC1252") => PageCode::WPC1252,
-        Some("PC437") => PageCode::PC437,
-        Some("ISO8859_7") => PageCode::ISO8859_7,
-        _ => PageCode::PC850,
-    };
-    
-    let driver = NetworkDriver::open(&address, port, None)?;
-    let mut binding = Printer::new(driver, Protocol::default(), Some(PrinterOptions::default()));
-    let printer = binding
-        .debug_mode(Some(DebugMode::Dec))
-        .init()?
-        .page_code(codepage)?  // Set the codepage for character encoding
-        .smoothing(true)?
-        .justify(JustifyMode::LEFT)?
-        .reverse(true)?
-        .bold(false)?
-        .writeln(&format!("{} - {}", title, date_str))?
-        .feed()?;
 
-    if args.encode == Some(true) {
-        printer
-            .qrcode_option(
-                &message,
-                QRCodeOption::new(QRCodeModel::Model1, 6, QRCodeCorrectionLevel::M),
-            )?
-            .feed()?;
+    if args.api {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            start_api_server(args.api_port).await.unwrap();
+        });
+        Ok(())
     } else {
-        printer
-            .justify(JustifyMode::LEFT)?
-            .reverse(false)?
-            .underline(UnderlineMode::None)?
-            .size(2, 2)?
-            .writeln(&message)?
-            .feed()?;
+        run_cli_print(args)
     }
-
-    printer.print_cut()?;
-    Ok(())
 }

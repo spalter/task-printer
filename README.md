@@ -1,6 +1,6 @@
 # TaskPrinter
 
-A command-line tool for printing tasks to ESC/POS thermal printers over a network connection.
+A command-line tool and REST API for printing tasks to ESC/POS thermal printers over a network connection.
 
 ## Installation
 
@@ -8,6 +8,7 @@ A command-line tool for printing tasks to ESC/POS thermal printers over a networ
 
 - Rust toolchain (install from [rustup.rs](https://rustup.rs/))
 - ESC/POS compatible thermal printer with network connectivity
+- For container deployment: Podman or Docker
 
 ### Build from Source
 
@@ -23,7 +24,7 @@ The executable will be available at `target/release/taskprinter.exe` (Windows) o
 
 ## Usage
 
-### Basic Usage
+### CLI Mode
 
 ```bash
 # Print with title and message
@@ -145,13 +146,119 @@ The application supports various character encodings to handle international cha
 3. Note the printer's IP address and port (typically 9100)
 4. Update the default address in the command or use `-a` and `-p` options
 
+### API Mode
+
+TaskPrinter can run as a REST API server
+
+#### Starting the API Server
+
+```bash
+# Start API server on default port 3000
+taskprinter --api
+
+# Start API server on custom port
+taskprinter --api --api-port 8080
+```
+
+#### API Endpoints
+
+##### Health Check
+
+```http
+GET /health
+GET /
+```
+
+Response:
+
+```json
+{
+  "status": "healthy",
+  "service": "taskprinter",
+  "version": "0.1.1"
+}
+```
+
+##### Print Task
+
+```http
+POST /print
+Content-Type: application/json
+```
+
+Request body:
+
+```json
+{
+  "title": "URGENT TASK",
+  "message": "Complete the quarterly report by EOD",
+  "date": "26/08/2025",
+  "encode": false,
+  "address": "taskbob",
+  "port": 9100,
+  "codepage": "PC850"
+}
+```
+
+Response (success):
+
+```json
+{
+  "success": true,
+  "message": "Print job completed successfully"
+}
+```
+
+Response (error): HTTP 500 Internal Server Error
+
+**Required fields:** Only `message` is required. All other fields are optional and will use defaults.
+
+#### Example API Usage
+
+```bash
+# Using curl
+curl -X POST http://localhost:3000/print \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "TODO",
+    "message": "Buy groceries"
+  }'
+
+# With custom printer settings
+curl -X POST http://localhost:3000/print \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Server maintenance complete",
+    "address": "10.0.1.100",
+    "port": 9100,
+    "encode": false
+  }'
+```
+
+### Container Deployment
+
+TaskPrinter includes Podman container support for easy deployment.
+
+#### Building the Container
+
+```bash
+podman build -t taskprinter-api .
+```
+
+#### Running the Container
+
+```bash
+podman run -d -p 3000:3000 --name taskprinter taskprinter-api
+```
+
+#### Container Environment
+
+The container runs the API server by default on port 3000. You can access the API at:
+
+- Health check: `http://localhost:3000/health`
+- Print endpoint: `http://localhost:3000/print`
+
 ## Development
-
-### Dependencies
-
-- `escpos` - ESC/POS printer control
-- `clap` - Command line argument parsing
-- `chrono` - Date and time handling
 
 ### Building
 
@@ -169,14 +276,6 @@ cargo test
 cargo run -- -t "Test" -m "Development build"
 ```
 
-## License
-
-This project is available under your preferred open source license.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.
-
 ## Changelog
 
 ### v0.1.0
@@ -192,6 +291,8 @@ Contributions are welcome! Please feel free to submit issues, feature requests, 
 ### v0.1.1
 
 - Added addition page codes
+
+### v0.1.2
 
 ## Credits
 
