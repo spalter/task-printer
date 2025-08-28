@@ -1,16 +1,17 @@
+use crate::printer::{PrintTask, print_qr_code, print_task};
 use axum::{
+    Router,
     http::StatusCode,
     response::Json,
     routing::{get, post},
-    Router,
 };
+use log::{error, info};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
-use crate::printer::{PrintTask, print_task};
 
 /// Request payload for the print API endpoint.
-/// 
+///
 /// This struct represents the JSON payload that clients send to the `/print` endpoint.
 /// All fields except `message` are optional and will use default values if not provided.
 #[derive(Deserialize)]
@@ -32,7 +33,7 @@ pub struct PrintRequest {
 }
 
 /// Response payload for the print API endpoint.
-/// 
+///
 /// This struct represents the JSON response sent back to clients after a print request.
 #[derive(Serialize)]
 pub struct PrintResponse {
@@ -43,31 +44,31 @@ pub struct PrintResponse {
 }
 
 /// Starts the HTTP API server.
-/// 
+///
 /// This function creates and starts an HTTP server that provides REST endpoints
 /// for printing tasks. The server includes CORS support and provides both health
 /// check and print functionality.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `port` - The port number to bind the server to (e.g., 3000)
-/// 
+///
 /// # Returns
-/// 
+///
 /// * `Result<(), Box<dyn std::error::Error>>` - Ok(()) if the server shuts down gracefully,
 ///   or an error if the server fails to start or encounters a fatal error
-/// 
+///
 /// # Endpoints
-/// 
+///
 /// - `GET /` - Health check endpoint
 /// - `GET /health` - Health check endpoint  
 /// - `POST /print` - Print a task
-/// 
+///
 /// # Examples
-/// 
+///
 /// ```
 /// use taskprinter::api::start_api_server;
-/// 
+///
 /// #[tokio::main]
 /// async fn main() {
 ///     start_api_server(3000).await.expect("Server failed");
@@ -81,27 +82,27 @@ pub async fn start_api_server(port: u16) -> Result<(), Box<dyn std::error::Error
         .layer(CorsLayer::permissive());
 
     let listener = TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
-    println!("API server running on http://0.0.0.0:{}", port);
-    
+    info!("API server running on http://0.0.0.0:{}", port);
+
     axum::serve(listener, app).await?;
     Ok(())
 }
 
 /// Health check endpoint handler.
-/// 
+///
 /// This function handles GET requests to `/` and `/health` endpoints.
 /// It returns a JSON response indicating the service status and version information.
-/// 
+///
 /// # Returns
-/// 
+///
 /// * `Json<serde_json::Value>` - A JSON response containing service health information
-/// 
+///
 /// # Response Format
-/// 
+///
 /// ```json
 /// {
 ///   "status": "healthy",
-///   "service": "taskprinter", 
+///   "service": "taskprinter",
 ///   "version": "<cargo_package_version>"
 /// }
 /// ```
@@ -114,25 +115,25 @@ async fn health_check() -> Json<serde_json::Value> {
 }
 
 /// Print endpoint handler.
-/// 
+///
 /// This function handles POST requests to `/print` endpoint. It accepts a JSON payload
 /// containing print job details, converts it to a `PrintTask`, and attempts to print it.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `payload` - A `PrintRequest` extracted from the JSON request body
-/// 
+///
 /// # Returns
-/// 
+///
 /// * `Result<Json<PrintResponse>, StatusCode>` - On success, returns a JSON response
 ///   with success status. On failure, returns HTTP 500 Internal Server Error.
-/// 
+///
 /// # Request Format
-/// 
+///
 /// ```json
 /// {
 ///   "title": "Optional title",
-///   "message": "Required message content", 
+///   "message": "Required message content",
 ///   "date": "Optional date string",
 ///   "encode": false,
 ///   "address": "printer.local",
@@ -140,16 +141,19 @@ async fn health_check() -> Json<serde_json::Value> {
 ///   "codepage": "PC850"
 /// }
 /// ```
-/// 
+///
 /// # Response Format
-/// 
+///
 /// ```json
 /// {
 ///   "success": true,
 ///   "message": "Print job completed successfully"
 /// }
 /// ```
-async fn print_handler(Json(payload): Json<PrintRequest>) -> Result<Json<PrintResponse>, StatusCode> {
+async fn print_handler(
+    Json(payload): Json<PrintRequest>,
+) -> Result<Json<PrintResponse>, StatusCode> {
+    info!("Received print request");
     let task = PrintTask {
         title: payload.title,
         message: payload.message,
@@ -160,13 +164,20 @@ async fn print_handler(Json(payload): Json<PrintRequest>) -> Result<Json<PrintRe
         codepage: payload.codepage,
     };
 
-    match print_task(task) {
+    let result;
+    if task.encode == Some(true) {
+        result = print_qr_code(task);
+    } else {
+        result = print_task(task);
+    }
+
+    match result {
         Ok(()) => Ok(Json(PrintResponse {
             success: true,
             message: "Print job completed successfully".to_string(),
         })),
         Err(e) => {
-            eprintln!("Print error: {}", e);
+            error!("Print error: {}", e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
         }
     }
